@@ -29,6 +29,5 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     completion_percent:completion,qualified:true,invalidated:false,
   });
   if(error)return NextResponse.json({error:error.message},{status:400});
-  await admin.rpc("recalculate_weekly_chart");
   return NextResponse.json({ok:true,qualified:true});
 }
