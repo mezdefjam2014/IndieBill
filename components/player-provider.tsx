@@ -14,13 +14,13 @@ export type PlayerTrack = {
   title: string;
   artist: string;
   artwork: string;
-  audioUrl?: string;
 };
 
 type PlayerValue = {
   track: PlayerTrack | null;
   queue: PlayerTrack[];
   isPlaying: boolean;
+  isLoading: boolean;
   currentTime: number;
   duration: number;
   volume: number;
@@ -39,64 +39,63 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const resolveAudioUrl = useCallback(async (item: PlayerTrack) => {
-    if (item.audioUrl) return item.audioUrl;
-
-    const response = await fetch(`/api/tracks/${item.id}/stream`, {
-      method: "POST",
-      cache: "no-store",
-    });
-    const result = await response.json().catch(() => ({}));
-
-    if (!response.ok || !result.signedUrl) {
-      throw new Error(result.error || "Unable to load this track.");
-    }
-
-    return String(result.signedUrl);
-  }, []);
-
   const start = useCallback(
     async (nextTrack: PlayerTrack, nextQueue?: PlayerTrack[]) => {
-      if (nextQueue?.length) setQueue(nextQueue);
+      if (nextQueue?.length) {
+        setQueue(nextQueue);
+      }
 
-      if (track?.id === nextTrack.id && audioRef.current) {
-        if (audioRef.current.paused) {
-          await audioRef.current.play();
+      const audio = audioRef.current;
+      if (!audio) {
+        throw new Error("The audio player is not ready.");
+      }
+
+      if (track?.id === nextTrack.id) {
+        if (audio.paused) {
+          await audio.play();
         } else {
-          audioRef.current.pause();
+          audio.pause();
         }
         return;
       }
 
-      const audioUrl = await resolveAudioUrl(nextTrack);
-      const resolved = { ...nextTrack, audioUrl };
-
-      setTrack(resolved);
+      setTrack(nextTrack);
       setCurrentTime(0);
       setDuration(0);
+      setIsLoading(true);
 
-      window.setTimeout(async () => {
-        const audio = audioRef.current;
-        if (!audio) return;
-        audio.currentTime = 0;
-        try {
-          await audio.play();
-        } catch {
-          setIsPlaying(false);
-        }
-      }, 0);
+      // Assigning the route directly preserves the original click gesture.
+      // The route redirects the audio element to a short-lived signed URL.
+      const streamUrl = `/api/tracks/${nextTrack.id}/stream`;
+      audio.pause();
+      audio.src = streamUrl;
+      audio.currentTime = 0;
+      audio.load();
+
+      try {
+        await audio.play();
+      } catch (error) {
+        setIsLoading(false);
+        throw new Error(
+          error instanceof Error
+            ? error.message
+            : "Your browser blocked automatic playback."
+        );
+      }
     },
-    [resolveAudioUrl, track?.id]
+    [track?.id]
   );
 
   const toggle = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
     if (audio.paused) {
       void audio.play();
     } else {
@@ -107,24 +106,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const seek = useCallback((seconds: number) => {
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(seconds)) return;
-    audio.currentTime = Math.max(0, Math.min(seconds, audio.duration || seconds));
+
+    const safeDuration = Number.isFinite(audio.duration)
+      ? audio.duration
+      : seconds;
+
+    audio.currentTime = Math.max(0, Math.min(seconds, safeDuration));
     setCurrentTime(audio.currentTime);
   }, []);
 
   const setVolume = useCallback((nextVolume: number) => {
     const normalized = Math.max(0, Math.min(1, nextVolume));
     setVolumeState(normalized);
-    if (audioRef.current) audioRef.current.volume = normalized;
+
+    if (audioRef.current) {
+      audioRef.current.volume = normalized;
+    }
   }, []);
 
   const playRelative = useCallback(
     (direction: 1 | -1) => {
       if (!track || !queue.length) return;
+
       const index = queue.findIndex((item) => item.id === track.id);
       const nextIndex =
         index < 0
           ? 0
           : (index + direction + queue.length) % queue.length;
+
       void start(queue[nextIndex], queue);
     },
     [queue, start, track]
@@ -139,8 +148,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const updateTime = () => setCurrentTime(audio.currentTime || 0);
     const updateDuration = () => setDuration(audio.duration || 0);
-    const onPlay = () => setIsPlaying(true);
+    const onPlay = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+    };
     const onPause = () => setIsPlaying(false);
+    const onWaiting = () => setIsLoading(true);
+    const onCanPlay = () => setIsLoading(false);
     const onEnded = () => next();
 
     audio.addEventListener("timeupdate", updateTime);
@@ -148,6 +162,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audio.addEventListener("durationchange", updateDuration);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
+    audio.addEventListener("waiting", onWaiting);
+    audio.addEventListener("canplay", onCanPlay);
     audio.addEventListener("ended", onEnded);
 
     return () => {
@@ -156,9 +172,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("durationchange", updateDuration);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("waiting", onWaiting);
+      audio.removeEventListener("canplay", onCanPlay);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [next, track?.id]);
+  }, [next]);
 
   return (
     <PlayerContext.Provider
@@ -166,6 +184,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         track,
         queue,
         isPlaying,
+        isLoading,
         currentTime,
         duration,
         volume,
@@ -185,6 +204,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
 export function usePlayer() {
   const value = useContext(PlayerContext);
-  if (!value) throw new Error("PlayerProvider missing.");
+
+  if (!value) {
+    throw new Error("PlayerProvider missing.");
+  }
+
   return value;
 }

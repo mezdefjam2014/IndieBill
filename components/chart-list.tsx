@@ -29,7 +29,6 @@ export function ChartList({ tracks }: { tracks: ChartTrack[] }) {
     toggle,
     seek,
   } = usePlayer();
-  const [loadingTrack, setLoadingTrack] = useState("");
   const [engagement, setEngagement] = useState<EngagementState>(() =>
     Object.fromEntries(
       tracks.map((track) => [
@@ -57,7 +56,6 @@ export function ChartList({ tracks }: { tracks: ChartTrack[] }) {
       return;
     }
 
-    setLoadingTrack(track.id);
     try {
       await start(
         {
@@ -70,8 +68,6 @@ export function ChartList({ tracks }: { tracks: ChartTrack[] }) {
       );
     } catch (error) {
       alert(error instanceof Error ? error.message : "Unable to play track.");
-    } finally {
-      setLoadingTrack("");
     }
   }
 
@@ -168,7 +164,6 @@ export function ChartList({ tracks }: { tracks: ChartTrack[] }) {
               <img src={track.artworkUrl} alt={`${track.title} artwork`} />
               <button
                 type="button"
-                disabled={loadingTrack === track.id}
                 onClick={() => play(track)}
                 aria-label={
                   active && isPlaying ? `Pause ${track.title}` : `Play ${track.title}`
