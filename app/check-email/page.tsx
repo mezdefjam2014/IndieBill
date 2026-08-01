@@ -1,0 +1,1 @@
+export default function Page(){return <main className="message-page"><h1>Check your email</h1><p>Use the confirmation link to activate your account.</p></main>; }
