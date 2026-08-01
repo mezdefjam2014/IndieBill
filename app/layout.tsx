@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/header";
 import { PlayerProvider } from "@/components/player-provider";
-import { GlobalPlayer } from "@/components/global-player";
 
 export const metadata: Metadata = {
   title: { default: "Indie Billboard", template: "%s | Indie Billboard" },
@@ -16,7 +15,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PlayerProvider>
           <Header />
           {children}
-          <GlobalPlayer />
         </PlayerProvider>
       </body>
     </html>
