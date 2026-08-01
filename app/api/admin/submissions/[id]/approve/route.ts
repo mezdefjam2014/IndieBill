@@ -22,7 +22,14 @@ export async function POST(_:Request,{params}:{params:Promise<{id:string}>}) {
   if(ua.error||ui.error)return NextResponse.json({error:ua.error?.message||ui.error?.message},{status:500});
   const{data:track,error}=await admin.from("tracks").insert({
     submission_id:s.id,artist_id:s.artist_id,genre_id:s.genre_id,title:s.track_title,
-    slug:`${slug(s.track_title)||"track"}-${token.slice(0,8)}`,artwork_path:artworkPath,mp3_path:audioPath,
+    slug:`${slug(s.track_title)||"track"}-${token.slice(0,8)}`,
+    artwork_path:artworkPath,
+    mp3_path:audioPath,
+
+    // Compatibility with the original tracks schema.
+    cover_path:artworkPath,
+    audio_path:audioPath,
+
     status:"published",chart_eligible:true,published_at:new Date().toISOString(),
   }).select("id").single();
   if(error)return NextResponse.json({error:error.message},{status:400});
