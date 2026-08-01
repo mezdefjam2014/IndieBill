@@ -103,6 +103,11 @@ export async function POST(request: Request) {
       slug: `${slug(title) || "track"}-${token}`,
       artwork_path: session.artworkPath,
       mp3_path: session.audioPath,
+
+      // Compatibility with the original tracks schema.
+      cover_path: session.artworkPath,
+      audio_path: session.audioPath,
+
       status: "published",
       chart_eligible: true,
       published_at: new Date().toISOString(),
