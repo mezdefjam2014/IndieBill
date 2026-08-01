@@ -44,6 +44,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const reportedTrack = useRef<string | null>(null);
 
   const start = useCallback(
     async (nextTrack: PlayerTrack, nextQueue?: PlayerTrack[]) => {
@@ -178,6 +179,44 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
   }, [next]);
 
+
+  useEffect(() => {
+    reportedTrack.current = null;
+  }, [track?.id]);
+
+  async function reportQualifiedPlay() {
+    const currentTrack = track;
+    const audio = audioRef.current;
+
+    if (
+      !currentTrack ||
+      !audio ||
+      audio.currentTime < 30 ||
+      reportedTrack.current === currentTrack.id
+    ) {
+      return;
+    }
+
+    reportedTrack.current = currentTrack.id;
+
+    await fetch(`/api/tracks/${currentTrack.id}/play`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        listenedSeconds: Math.floor(audio.currentTime),
+        completionPercent: audio.duration
+          ? Math.min(
+              100,
+              Math.round((audio.currentTime / audio.duration) * 100)
+            )
+          : 0,
+      }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }
+
   return (
     <PlayerContext.Provider
       value={{
@@ -198,6 +237,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      <audio
+        ref={audioRef}
+        className="chart-audio-engine"
+        preload="metadata"
+        onTimeUpdate={reportQualifiedPlay}
+      />
     </PlayerContext.Provider>
   );
 }
